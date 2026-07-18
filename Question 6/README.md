@@ -3,6 +3,7 @@
 ## Requirements
 
 - Python 3
+- No external Python packages are required; both implementations use only the Python standard library.
 
 Run the commands from this folder so the scripts can find:
 
