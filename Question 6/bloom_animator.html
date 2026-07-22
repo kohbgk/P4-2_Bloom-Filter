@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bloom filter double hashing — GPT vs Claude</title>
+<style>
+  :root{
+    --bg:#101418; --panel:#181e24; --panel2:#1f2730; --line:#2c3640;
+    --ink:#e8ecef; --dim:#9aa7b1; --faint:#5f6c76;
+    --gpt:#4da3ea; --gpt-deep:#1b5e96; --cla:#e8734a; --cla-deep:#9c3f1f;
+    --ok:#6fbf73; --warn:#e2b93b; --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;padding:32px 16px 64px}
+  .wrap{max-width:860px;margin:0 auto}
+  header h1{font-size:22px;font-weight:600;margin:0 0 4px;letter-spacing:.2px}
+  header p{color:var(--dim);margin:0 0 24px;max-width:64ch}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  button{background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:8px 16px;font:inherit;font-size:14px;cursor:pointer}
+  button:hover{border-color:var(--faint)}
+  button:disabled{opacity:.45;cursor:default}
+  button.primary{background:var(--gpt-deep);border-color:var(--gpt-deep)}
+  .spd{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--dim);font-size:13px}
+  input[type=range]{accent-color:var(--gpt)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:14px 18px;margin:10px 0}
+  .hashline{display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--dim)}
+  .hashline .mono{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+  .badge{font-size:12px;padding:3px 12px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .badge.even{border-color:var(--warn);color:var(--warn)}
+  .badge.odd{border-color:var(--ok);color:var(--ok)}
+  .impl-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+  .impl-head .name{font-weight:600;font-size:15px}
+  .impl-head .name.g{color:var(--gpt)} .impl-head .name.c{color:var(--cla)}
+  .impl-head .stride{font-size:13px;color:var(--dim);font-family:var(--mono)}
+  .bits{display:flex;gap:3px;flex-wrap:wrap}
+  .cell{width:20px;height:20px;border:1px solid var(--line);border-radius:4px;
+    transition:background .25s,transform .2s,box-shadow .2s;position:relative}
+  .cell.on-g{background:var(--gpt);border-color:var(--gpt)}
+  .cell.on-c{background:var(--cla);border-color:var(--cla)}
+  .cell.probe{transform:scale(1.4);box-shadow:0 0 0 2px var(--ink);z-index:2}
+  .cell.diffmark{outline:2px dashed var(--warn);outline-offset:1px}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+  .stat .lbl{font-size:12.5px;color:var(--dim)}
+  .stat .val{font-size:26px;font-weight:600;font-family:var(--mono)}
+  #verdict{margin-top:14px;font-size:14px;color:var(--dim);min-height:24px}
+  #verdict.even{color:var(--warn)} #verdict.odd{color:var(--ok)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--dim);margin-top:18px}
+  .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px}
+  footer{margin-top:28px;font-size:13px;color:var(--faint);max-width:70ch}
+  @media (prefers-reduced-motion: reduce){.cell{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Why two correct Bloom filters set different bits</h1>
+  <p>Each press hashes a URL with real SHA-256, splits the digest into h1 and h2,
+  and walks the k probe positions (h1 + i·h2) mod m through both implementations.
+  GPT keeps h2 as-is; Claude forces it odd with OR 1. Watch what happens when the
+  raw h2 is even.</p>
+</header>
+
+<div class="controls">
+  <button class="primary" id="btn-next" onclick="hashNext()">Hash next URL</button>
+  <button id="btn-auto" onclick="autoRun()">Auto-run 5</button>
+  <button onclick="resetAll()">Reset</button>
+  <span class="spd">Speed <input type="range" id="spd" min="1" max="10" value="5" step="1"></span>
+</div>
+
+<div class="panel">
+  <div class="hashline">
+    <span>URL <span class="mono" id="url-out">press "Hash next URL"</span></span>
+  </div>
+  <div class="hashline" style="margin-top:8px">
+    <span>h1 <span class="mono" id="h1-out">&mdash;</span></span>
+    <span>h2 <span class="mono" id="h2-out">&mdash;</span></span>
+    <span class="badge" id="parity">parity &mdash;</span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="impl-head">
+    <span class="name g">GPT &mdash; stride = h2 (unchanged unless zero)</span>
+    <span class="stride" id="g-stride">stride &mdash;</span>
+  </div>
+  <div class="bits" id="row-g"></div>
+</div>
+
+<div class="panel">
+  <div class="impl-head">
+    <span class="name c">Claude &mdash; stride = h2 | 1 (forced odd)</span>
+    <span class="stride" id="c-stride">stride &mdash;</span>
+  </div>
+  <div class="bits" id="row-c"></div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="lbl">URLs hashed</div><div class="val" id="n-urls">0</div></div>
+  <div class="stat"><div class="lbl">Even h2 (diverged)</div><div class="val" id="n-even">0</div></div>
+  <div class="stat"><div class="lbl">Odd h2 (identical)</div><div class="val" id="n-odd">0</div></div>
+  <div class="stat"><div class="lbl">Bits differing now</div><div class="val" id="n-diff">0</div></div>
+</div>
+
+<div id="verdict"></div>
+
+<div class="legend">
+  <span><span class="sw" style="background:var(--gpt)"></span>bit set by GPT filter</span>
+  <span><span class="sw" style="background:var(--cla)"></span>bit set by Claude filter</span>
+  <span><span class="sw" style="border:2px dashed var(--warn);background:none"></span>set in one filter only</span>
+</div>
+
+<footer>
+  The array is shrunk to m = 32 bits with k = 4 probes so the stepping is visible;
+  the real scripts use millions of bits and identical arithmetic. Both filters always
+  agree on the first probe (h1 mod m). Roughly half of all SHA-256 digests have an
+  even upper half, so over many URLs about half diverge &mdash; which is why the two
+  scripts report different specific false positives while both converging on the same
+  target false-positive rate.
+</footer>
+</div>
+
+<script>
+"use strict";
+const M = 32n, K = 4, Mn = 32;
+let gBits = new Array(Mn).fill(false), cBits = new Array(Mn).fill(false);
+let idx = 0, busy = false, nEven = 0, nOdd = 0;
+const urls = [];
+for (let i = 0; i < 60; i++) {
+  urls.push("http://malware-" + (i * 13 % 97) + ".example.net/p/" + (i * 7 % 53));
+}
+const rg = document.getElementById("row-g"), rc = document.getElementById("row-c");
+for (let i = 0; i < Mn; i++) {
+  const a = document.createElement("div"); a.className = "cell"; a.id = "g" + i; rg.appendChild(a);
+  const b = document.createElement("div"); b.className = "cell"; b.id = "c" + i; rc.appendChild(b);
+}
+const $ = id => document.getElementById(id);
+const delay = () => 650 - 55 * (+$("spd").value - 1);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function sha256Fallback(bytes) {
+  const K32 = [
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const l = bytes.length, bitLen = l * 8;
+  const padded = new Uint8Array(((l + 8) >> 6 << 6) + 64);
+  padded.set(bytes); padded[l] = 0x80;
+  const dv = new DataView(padded.buffer);
+  dv.setUint32(padded.length - 4, bitLen >>> 0);
+  dv.setUint32(padded.length - 8, Math.floor(bitLen / 0x100000000));
+  const w = new Int32Array(64);
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let off = 0; off < padded.length; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getInt32(off + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i-15],7) ^ rotr(w[i-15],18) ^ (w[i-15] >>> 3);
+      const s1 = rotr(w[i-2],17) ^ rotr(w[i-2],19) ^ (w[i-2] >>> 10);
+      w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+    }
+    let [a,b,c,d,e,f,g,h] = H;
+    for (let i = 0; i < 64; i++) {
+      const S1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + K32[i] + w[i]) | 0;
+      const S0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22);
+      const mj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + mj) | 0;
+      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
+    }
+    H = [ (H[0]+a)|0,(H[1]+b)|0,(H[2]+c)|0,(H[3]+d)|0,(H[4]+e)|0,(H[5]+f)|0,(H[6]+g)|0,(H[7]+h)|0 ];
+  }
+  const out = new Uint8Array(32);
+  const ov = new DataView(out.buffer);
+  for (let i = 0; i < 8; i++) ov.setInt32(i * 4, H[i]);
+  return out;
+}
+
+async function sha(url) {
+  const bytes = new TextEncoder().encode(url);
+  let digest;
+  if (window.crypto && crypto.subtle) {
+    try { digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)); }
+    catch (e) { digest = sha256Fallback(bytes); }
+  } else {
+    digest = sha256Fallback(bytes);
+  }
+  let h1 = 0n, h2 = 0n;
+  for (let i = 0; i < 16; i++) h1 = (h1 << 8n) | BigInt(digest[i]);
+  for (let i = 16; i < 32; i++) h2 = (h2 << 8n) | BigInt(digest[i]);
+  return [h1, h2];
+}
+
+function updDiff() {
+  let n = 0;
+  for (let i = 0; i < Mn; i++) {
+    const gm = $("g" + i), cm = $("c" + i);
+    if (gBits[i] !== cBits[i]) { n++; gm.classList.add("diffmark"); cm.classList.add("diffmark"); }
+    else { gm.classList.remove("diffmark"); cm.classList.remove("diffmark"); }
+  }
+  $("n-diff").textContent = n;
+}
+
+async function hashNext() {
+  if (busy) return; busy = true; $("btn-next").disabled = true;
+  const u = urls[idx % urls.length]; idx++;
+  $("url-out").textContent = u;
+  const [h1, h2] = await sha(u);
+  const even = (h2 & 1n) === 0n;
+  $("h1-out").textContent = "0x" + h1.toString(16).padStart(32, "0").slice(0, 12) + "\u2026";
+  $("h2-out").textContent = "0x" + h2.toString(16).padStart(32, "0").slice(0, 12) + "\u2026";
+  const p = $("parity");
+  p.textContent = even ? "h2 is even" : "h2 is odd";
+  p.className = "badge " + (even ? "even" : "odd");
+  const gs = h2 % M, cs = (h2 | 1n) % M, start = h1 % M;
+  $("g-stride").textContent = "stride " + gs + " mod 32";
+  $("c-stride").textContent = "stride " + cs + " mod 32";
+  let gp = start, cp = start;
+  for (let i = 0; i < K; i++) {
+    const ge = $("g" + gp), ce = $("c" + cp);
+    ge.classList.add("probe"); ce.classList.add("probe");
+    await sleep(delay());
+    gBits[Number(gp)] = true; cBits[Number(cp)] = true;
+    ge.classList.add("on-g"); ce.classList.add("on-c");
+    ge.classList.remove("probe"); ce.classList.remove("probe");
+    gp = (gp + gs) % M; cp = (cp + cs) % M;
+  }
+  $("n-urls").textContent = idx;
+  if (even) { nEven++; $("n-even").textContent = nEven; }
+  else { nOdd++; $("n-odd").textContent = nOdd; }
+  updDiff();
+  const v = $("verdict");
+  v.className = even ? "even" : "odd";
+  v.textContent = even
+    ? "h2 was even, so the strides differed: probes after the first landed on different cells."
+    : "h2 was already odd, so OR 1 changed nothing: both filters set identical bits for this URL.";
+  busy = false; $("btn-next").disabled = false;
+}
+
+async function autoRun() {
+  const b = $("btn-auto"); b.disabled = true;
+  for (let i = 0; i < 5; i++) { await hashNext(); await sleep(250); }
+  b.disabled = false;
+}
+
+function resetAll() {
+  if (busy) return;
+  idx = 0; nEven = 0; nOdd = 0;
+  gBits.fill(false); cBits.fill(false);
+  for (let i = 0; i < Mn; i++) { $("g" + i).className = "cell"; $("c" + i).className = "cell"; }
+  $("n-urls").textContent = "0"; $("n-even").textContent = "0";
+  $("n-odd").textContent = "0"; $("n-diff").textContent = "0";
+  $("verdict").textContent = ""; $("verdict").className = "";
+  $("url-out").textContent = 'press "Hash next URL"';
+  $("h1-out").innerHTML = "&mdash;"; $("h2-out").innerHTML = "&mdash;";
+  $("g-stride").innerHTML = "stride &mdash;"; $("c-stride").innerHTML = "stride &mdash;";
+  const p = $("parity"); p.textContent = "parity \u2014"; p.className = "badge";
+}
+</script>
+</body>
+</html>
