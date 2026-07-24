@@ -3,7 +3,7 @@
 Supporting code and data for our INF1008 Data Structures and Algorithms assignment,
 *Evaluation of Data Structures or Algorithms using an AI Chatbot* (AY 2025/2026, Trimester 3).
 
-We selected the Bloom filter because it exemplifies a space‑efficient probabilistic data structure with well‑defined trade‑offs—memory vs. accuracy, speed vs. certainty—making it an ideal subject for comparing how different AI models explain theoretical concepts, demonstrate algorithms, reason about correctness, design experiments, and generate working code.
+We selected the Bloom filter because it exemplifies a space‑efficient probabilistic data structure with well‑defined trade‑offs (memory vs. accuracy, speed vs. certainty), making it an ideal subject for comparing how different AI models explain theoretical concepts, demonstrate algorithms, reason about correctness, design experiments, and generate working code.
 
 We asked two AI chatbots, **ChatGPT (GPT-5.5)** and **Claude (Opus 4.8)**, the same five
 questions about the Bloom filter data structure, then evaluated their answers. The final
