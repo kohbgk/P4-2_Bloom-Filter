@@ -11,7 +11,7 @@ question asked each chatbot to generate a working Bloom filter implementation. T
 repository holds both generated implementations, the datasets they were tested on, their
 measured output, and an interactive visualiser we built to compare their hashing behaviour.
 
-**Live visualiser:** https://kohbgk.github.io/P4-2_Bloom-Filter/Question%206/bloom_animator.html
+**Live visualiser:** https://kohbgk.github.io/P4-2_Bloom-Filter/Question%205/bloom_animator.html
 
 ## Repository structure
 
