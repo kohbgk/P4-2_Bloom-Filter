@@ -1,0 +1,47 @@
+=== Bloom filter URL evaluation ===
+Malicious file:      malicious_urls.txt
+Non-malicious file:  non_malicious_urls.txt
+Target FP rate:      0.01000000
+
+Counting malicious URLs for Bloom sizing...
+
+Bloom configuration:
+  Expected inserted items: 64,938
+  Bit array size:          622,435 bits
+  Backing bytearray size:  77,805 bytes
+  Backing bytearray size:  75.98 KiB
+  Number of hash probes:   7
+
+Inserting malicious URLs into Bloom filter...
+Loading exact sets for verification and overlap detection...
+Detecting overlaps...
+Checking malicious URLs for Bloom false negatives...
+Checking non-malicious URLs for Bloom false positives...
+
+=== Results ===
+Malicious URLs counted:              64,938
+Malicious URLs inserted:             64,938
+Malicious exact-set size:            64,938
+Non-malicious exact-set size:        999,299
+Dataset overlaps:                    0
+Non-malicious tested after overlaps: 999,299
+Bloom false negatives:               0
+Bloom false positives:               9,901
+Measured FP rate:                    0.00990795
+
+=== Timing ===
+Counting time:                       0.0088 seconds
+Insertion time:                      0.1450 seconds
+Insertion throughput:                447,802.57 URLs/sec
+Exact-set load time:                 0.2397 seconds
+Overlap detection time:              0.0028 seconds
+False-negative query time:           0.1208 seconds
+False-negative query throughput:     537,563.55 URLs/sec
+False-positive query time:           1.2396 seconds
+False-positive query throughput:     806,145.49 URLs/sec
+Total runtime:                       1.7568 seconds
+
+=== Explanation ===
+Hashing: each URL is encoded as UTF-8 and hashed once with SHA-256. The 256-bit digest is split into two 128-bit integers, h1 and h2. The Bloom filter uses double hashing, generating positions as (h1 + i * h2) mod m for i from 0 to k-1. This is deterministic and does not use Python's randomized hash().
+Performance: insertion and membership checks both cost O(k) bit probes per URL. The bytearray stores only the Bloom bit array, so Bloom memory usage is roughly m / 8 bytes. Exact sets are intentionally separate and are used only for validation, overlap detection, and fair false-positive measurement.
+False positives: URLs present in both files are excluded from the false-positive denominator and numerator, because a Bloom hit for an overlapping URL is expected after inserting the malicious dataset.

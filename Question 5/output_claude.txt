@@ -1,0 +1,32 @@
+Loading input files ...
+  malicious URLs     : 64,938
+  non-malicious URLs : 999,299
+Bloom filter parameters
+  target FP rate     : 1.0000%
+  bit slots (m)      : 622,435
+  hash functions (k) : 7
+  memory             : 76.0 KiB
+Inserting malicious URLs ...
+  inserted 64,938 URLs in 0.126s (513,715 URLs/s)
+  bits set           : 322,546/622,435 (51.8%)
+Verifying no false negatives (querying every malicious URL) ...
+  completed in 0.118s
+Dataset overlap (URLs in BOTH files): 0
+Querying non-malicious URLs for false positives ...
+  queried 999,299 URLs in 1.369s (729,779 URLs/s)
+============================================================
+RESULTS
+============================================================
+Malicious URLs inserted       : 64,938
+Non-malicious URLs queried    : 999,299
+Dataset overlaps (excluded)   : 0
+Clean URLs actually tested    : 999,299
+False negatives               : 0 (OK - impossible by design)
+Bloom false positives         : 10,051
+Measured FP rate              : 1.0058%
+Target FP rate                : 1.0000%
+Theoretical FP rate           : 1.0039%
+Insertion time                : 0.126s (513,715 URLs/s)
+Query time                    : 1.369s (729,779 URLs/s)
+Memory used                   : 76.0 KiB (9.6 bits/URL)
+============================================================
